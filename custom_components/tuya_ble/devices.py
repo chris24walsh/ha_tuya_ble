@@ -2,6 +2,9 @@
 from __future__ import annotations
 from dataclasses import dataclass
 
+from threading import Timer
+from .tuya_ble import TuyaBLEDataPointType
+
 import logging
 from homeassistant.const import CONF_ADDRESS, CONF_DEVICE_ID
 
@@ -54,6 +57,7 @@ class TuyaBLEProductInfo:
     name: str
     manufacturer: str = DEVICE_DEF_MANUFACTURER
     fingerbot: TuyaBLEFingerbotInfo | None = None
+    lock: int | None = None
 
 
 class TuyaBLEEntity(CoordinatorEntity):
@@ -81,6 +85,24 @@ class TuyaBLEEntity(CoordinatorEntity):
         self.entity_id = generate_entity_id(
             "sensor.{}", self._attr_unique_id, hass=hass
         )
+        if product.lock:
+            # Keep alive
+            # Gimdow PRO MAX will disconnect after around minute idle,
+            self._thread = Timer(60, self._ping_target)
+            self._thread.start()
+
+    def _ping_target(self):
+        datapoint = self._device.datapoints.get_or_create(
+            # refer to sdk, dp 52 is for deleting temp password
+            # should be safe as a dummy keep alive message
+            52,
+            TuyaBLEDataPointType.DT_BOOL,
+            False,
+        )
+        if datapoint:
+            self._hass.create_task(datapoint.set_value(True))
+        self._thread = Timer(60, self._ping_target)
+        self._thread.start()
 
     @property
     def available(self) -> bool:
@@ -91,8 +113,7 @@ class TuyaBLEEntity(CoordinatorEntity):
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         self.async_write_ha_state()
-
-
+            
 class TuyaBLECoordinator(DataUpdateCoordinator[None]):
     """Data coordinator for receiving Tuya BLE updates."""
 
@@ -194,6 +215,16 @@ devices_database: dict[str, TuyaBLECategoryInfo] = {
             ),
         },
     ),
+    "jtmspro": TuyaBLECategoryInfo(
+        products={
+            "rlyxv7pe":  # Gimdow device product_id
+            TuyaBLEProductInfo(
+                name="A1 PRO MAX",
+                # Gimdow identity
+                lock=1,
+            ),
+        },
+    ),    
     "szjqr": TuyaBLECategoryInfo(
         products={
             "3yqdo5yt": TuyaBLEProductInfo(  # device product_id
