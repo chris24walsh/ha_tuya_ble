@@ -1298,7 +1298,8 @@ class TuyaBLEDevice:
             data += pack(">BBB", dp.id, int(dp.type.value), len(value))
             data += value
 
-        await self._send_packet(TuyaBLECode.FUN_SENDER_DPS, data)
+        #await self._send_packet(TuyaBLECode.FUN_SENDER_DPS, data)
+        await self._send_packet(TuyaBLECode.FUN_SENDER_DPS, data, False)
 
     async def _send_datapoints(self, datapoint_ids: list[int]) -> None:
         """Send new values of datapoints to the device."""
